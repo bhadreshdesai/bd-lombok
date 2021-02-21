@@ -9,18 +9,34 @@
   "engines": {
     "vscode": "^1.53.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bhadreshdesai/bd-lombok.git"
+  },
   "categories": [
     "Other"
   ],
+  "extensionDependencies": [
+    "redhat.java"
+  ],
   "activationEvents": [
-    "onCommand:bd-lombok.helloWorld"
+    "onCommand:bd-lombok.enablelombok",
+    "onCommand:bd-lombok.disablelombok",
+    "onLanguage:java",
+    "workspaceContains:pom.xml",
+    "workspaceContains:build.gradle",
+    "workspaceContains:.classpath"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "bd-lombok.helloWorld",
-        "title": "Hello World"
+        "command": "bd-lombok.enablelombok",
+        "title": "Enable Lombok"
+      },
+      {
+        "command": "bd-lombok.disablelombok",
+        "title": "Disable Lombok"
       }
     ]
   },
