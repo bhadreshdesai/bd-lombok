@@ -16,9 +16,6 @@
   "categories": [
     "Other"
   ],
-  "extensionDependencies": [
-    "redhat.java"
-  ],
   "activationEvents": [
     "onCommand:bd-lombok.enablelombok",
     "onCommand:bd-lombok.disablelombok",

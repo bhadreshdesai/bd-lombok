@@ -2,6 +2,7 @@ import * as path from "path";
 import * as url from "url";
 import {
   commands,
+  ConfigurationTarget,
   Extension,
   ExtensionContext,
   extensions,
@@ -35,10 +36,11 @@ namespace Constants {
    */
   export const LOMBOK_JAR: string = "lombok.jar";
   /**
-   * Regular expression to find the lombok jar in the classpath
+   * Regular expression to find the lombok jar in the classpath or vmargs
    */
-  export const LOMBOK_REGEX: RegExp = /lombok-.+\.jar$/;
+  export const LOMBOK_REGEX: RegExp = /lombok.+\.jar/;
 }
+
 export namespace Commands {
   /**
    * Enable Lombok extension
@@ -68,10 +70,8 @@ function getExtensionPath(): string {
   }
   return lombokExtension.extensionPath;
 }
-const getLombokJarPath = () =>
-  path.join(getExtensionPath(), Constants.LIB_PATH, Constants.LOMBOK_JAR);
 
-async function getJavaExtensionApi(): Promise<any> {
+export async function getJavaExtensionApi(): Promise<any> {
   // TODO: Find a way to use ExtensionAPI inteface from the redhat.java extension
   const javaExtension: Extension<any> | undefined = extensions.getExtension(
     Constants.EXTENSION_JAVA
@@ -90,19 +90,85 @@ async function getJavaExtensionApi(): Promise<any> {
   return javaExtensionApi;
 }
 
-function setLombokJavaAgentArg(): void {
-  const lombokJavaAgentArg: string = `-javaagent:"${getLombokJarPath()}"`;
-  // use inspect or get
-  // TODO: implement this function
-  let vmargsCheck = workspace
+const getLombokJarPath = () =>
+  path.join(getExtensionPath(), Constants.LIB_PATH, Constants.LOMBOK_JAR);
+
+const getLombokJavaAgentArg = () => `-javaagent:"${getLombokJarPath()}"`;
+
+const lombokJarExistsInString = (instring: string) =>
+  Constants.LOMBOK_REGEX.test(instring);
+
+async function removeLombokJavaAgentArg(): Promise<void> {
+  console.log("Remove lombok from vmargs");
+  let vmargsCheck: string | undefined = workspace
     .getConfiguration()
-    .inspect(Constants.KEY_JDT_LS_VMARGS);
+    .get(Constants.KEY_JDT_LS_VMARGS);
+  console.log(`Existing vmargs: ${vmargsCheck}`);
+  if (vmargsCheck) {
+    const lombokJavaAgentArg: string = getLombokJavaAgentArg();
+    const vmargs: string = vmargsCheck.replace(lombokJavaAgentArg, "");
+    console.log(`New vmargs: ${vmargs}`);
+    if (vmargs !== vmargsCheck) {
+      console.log(`removeLombokJavaAgentArg Setting vmargs: ${vmargs}`);
+      await workspace
+        .getConfiguration()
+        .update(
+          Constants.KEY_JDT_LS_VMARGS,
+          vmargs,
+          ConfigurationTarget.Workspace
+        );
+    }
+  }
+}
+
+async function setLombokJavaAgentArg(): Promise<void> {
+  const lombokJavaAgentArg: string = getLombokJavaAgentArg();
+  let lombokExists: boolean = false;
+  const vmargsCheck: string | undefined = workspace
+    .getConfiguration()
+    .get(Constants.KEY_JDT_LS_VMARGS);
+  if (vmargsCheck) {
+    lombokExists = lombokJarExistsInString(vmargsCheck);
+  }
+  console.log(
+    `lombokExists in vmargs: ${lombokExists}, vmargsCheck: ${vmargsCheck}`
+  );
+  if (!lombokExists) {
+    const vmargs: string = vmargsCheck
+      ? `${vmargsCheck} ${lombokJavaAgentArg}`
+      : lombokJavaAgentArg;
+    console.log(`setLombokJavaAgentArg Setting vmargs: ${vmargs}`);
+    await workspace
+      .getConfiguration()
+      .update(
+        Constants.KEY_JDT_LS_VMARGS,
+        vmargs,
+        ConfigurationTarget.Workspace
+      );
+  }
 }
 // Utils end ==================================================================
 
 // Commands start =============================================================
+export async function enableLombokIfRequired() {
+  const lombokExists: boolean = await isLombokInClassPath();
+  if (lombokExists) {
+    await setLombokJavaAgentArg();
+  } else {
+    await removeLombokJavaAgentArg();
+  }
+}
+
 async function cmdEnableLombok(): Promise<any> {
-  window.showInformationMessage("cmdEnableLombok");
+  await setLombokJavaAgentArg();
+}
+
+async function cmdDisableLombok(): Promise<void> {
+  await removeLombokJavaAgentArg();
+}
+
+async function isLombokInClassPath(): Promise<boolean> {
+  var lombokExists: boolean = false;
   if (workspace.workspaceFolders) {
     // root folder is the first folder in the workspaceFolders array
     // get the uripath of the root folder so we can use it to get the classpath from the java extension api
@@ -116,21 +182,14 @@ async function cmdEnableLombok(): Promise<any> {
     });
     if (classpathResult) {
       // check if the classpath contains lombok jar
-      var lombokExists = false;
       classpathResult.classpaths.every((cp: string) => {
-        lombokExists = Constants.LOMBOK_REGEX.test(cp);
+        lombokExists = lombokJarExistsInString(cp);
         // Exit the loop if we found lombok jar in the classpath
         return !lombokExists;
       });
-      if (lombokExists) {
-        // lombok exists in the classpath. Update the jdt.ls.vmargs settings
-      }
     }
   }
-}
-
-function cmdDisableLombok(): void {
-  window.showInformationMessage("cmdDisableLombok");
+  return lombokExists;
 }
 // Commands end ===============================================================
 
